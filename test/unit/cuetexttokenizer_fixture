@@ -1,0 +1,56 @@
+#ifndef __WEBVTT_TEST_CUETOKENIZER_FIXTURE__
+# define __WEBVTT_TEST_CUETOKENIZER_FIXTURE__
+#include <gtest/gtest.h>
+extern "C" {
+#include <webvtt/cuetext_internal.h>
+}
+
+enum
+{
+ RLM = 0x200F,
+ LRM = 0x200E,
+ NBSP = 0x00A0
+};
+
+class CueTextTokenizerTest : public ::testing::Test
+{
+  public:
+    virtual void SetUp() {
+      webvtt_init_string( &res );
+    }
+
+    virtual void TearDown() {
+      webvtt_release_string( &res );
+    }
+
+    webvtt_status status() const {
+      return current_status;
+    }
+
+    webvtt_token_state state() const {
+      return token_state;
+    }
+
+    const char * parsedText() const {
+      return webvtt_string_text( &res );
+    }
+
+    webvtt_uint16 utf16At( int offset ) {
+      webvtt_uint16 highSurrogate;
+      return webvtt_utf8_to_utf16( parsedText() + offset,
+                                   parsedText() + webvtt_string_length( &res ),
+                                   &highSurrogate );
+    }
+
+    webvtt_uint currentCharPos() {
+      return pos - start;
+    }
+
+  protected:
+    webvtt_string res;
+    webvtt_token_state token_state;
+    webvtt_status current_status;
+    const char *pos, *start;
+};
+
+#endif

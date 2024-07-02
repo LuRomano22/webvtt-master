@@ -1,0 +1,189 @@
+#ifndef __CUE_TEXTFIXTURE_H__
+#   define __CUE_TEXTFIXTURE_H__
+
+#include "test_parser"
+
+// This is set by CMake to contain the TEST_FILE_DIR value.
+#include "test_config.h"
+
+enum
+{
+ RLM = 0x200F,
+ LRM = 0x200E,
+ NBSP = 0x00A0
+};
+
+class CueTest : public ::testing::Test
+{
+protected:
+  CueTest() : parser(0) {}
+  ~CueTest()
+  {
+    if( parser )
+    {
+      try
+	  {
+	    delete parser; parser = 0;
+	  }
+      catch( std::exception e )
+	  {
+		  int x = 5;
+	  }
+    }
+  }
+
+  // Assert that we're using the default alignment for this cue
+  void expectDefaultAlignSetting( const Cue &cue ) {
+    EXPECT_TRUE( cue.isAlignedToMiddle() );
+  }
+
+  // Assert that we're using the default line position for this cue
+  void expectDefaultLineSetting( const Cue &cue ) {
+    EXPECT_TRUE( cue.isLinePositionAuto() );
+    EXPECT_TRUE( cue.snapToLines() );
+  }
+
+  // Assert that we're using the default text position for this cue
+  void expectDefaultPositionSetting( const Cue &cue ) {
+    EXPECT_EQ( 50, cue.textPositionPercentage() );
+  }
+
+  // Assert that we're using the default size for this cue
+  void expectDefaultSizeSetting( const Cue &cue ) {
+    EXPECT_EQ( 100, cue.sizePercentage() );
+  }
+
+  // Assert that we're using the default direction for this cue
+  void expectDefaultVerticalSetting( const Cue &cue ) {
+    EXPECT_TRUE( cue.isHorizontal() );
+  }
+
+  // Assert that we haven't accepted any cuesettings for this cue
+  void expectDefaultCueSettings( const Cue &cue ) {
+    expectDefaultAlignSetting( cue );
+    expectDefaultLineSetting( cue );
+    expectDefaultPositionSetting( cue );
+    expectDefaultSizeSetting( cue );
+    expectDefaultVerticalSetting( cue );
+  }
+
+  void expectEquals( const String &one, const String &two )
+  {
+    EXPECT_STREQ( one.utf8(), two.utf8() );
+  }
+
+  void expectEquals( const char *one, const String &two )
+  {
+    EXPECT_STREQ( one, two.utf8() );
+  }
+
+  /**
+   * Added functions for ASSERT-ing timestamp equality in an easier way.
+   */
+  void expectEquals( const Timestamp &ts, int hours, int minutes, int seconds,
+										 int millis )
+  {
+    EXPECT_EQ( hours, ts.hours() );
+    EXPECT_EQ( minutes, ts.minutes() );
+    EXPECT_EQ( seconds, ts.seconds() );
+
+    /* hack to avoid rounding error... (Is this needed with the integer
+     * timestamps?) */
+    EXPECT_TRUE( millis == ts.milliseconds() ||
+								 millis == ts.milliseconds() + 1 );
+  }
+
+  inline void expectEquals( const Timestamp &ts, int minutes, int seconds,
+														int millis )
+  {
+    return expectEquals( ts, 0, minutes, seconds, millis );
+  }
+
+  inline void expectEquals( const Error &err, webvtt_error code,
+														WebVTT::uint line, WebVTT::uint column )
+  {
+    EXPECT_EQ( code, err.error() );
+    EXPECT_EQ( line, err.line() );
+    EXPECT_EQ( column, err.column() );
+  }
+
+  void setVtt( const char *relativeFilePath )
+  {
+    std::string filePath;
+
+    // If TEST_FILE_DIR has not been set then that means we are probably
+    // not executing from a make command. Therefore, just use the path
+    // passed in.
+
+    filePath = TEST_FILE_DIR + std::string( "/" ) + relativeFilePath;
+
+    parser = new ItemStorageParser( filePath.c_str() );
+  }
+
+  void loadVtt( const char *relativeFilePath )
+  {
+    setVtt( relativeFilePath );
+    ASSERT_TRUE( parser->parse() ) << "parser.parse() failed";
+  }
+
+  void loadVtt( const char *relativeFilePath,
+								WebVTT::uint expectedNumberOfCues )
+  {
+    loadVtt( relativeFilePath );
+    ASSERT_EQ( expectedNumberOfCues,
+							 parser->cueCount() ) << "webvtt file contained different " <<
+																			 "number of cues than expected, once" <<
+																			 "parsed.";
+  }
+
+  void loadVtt( const char *relativeFilePath, bool expectedParseSuccessful,
+								WebVTT::uint expectedNumberOfCues )
+  {
+    setVtt( relativeFilePath );
+    ASSERT_EQ( expectedParseSuccessful,
+							 parser->parse() ) << "parser.parse() failed";
+    ASSERT_EQ( expectedNumberOfCues,
+							 parser->cueCount() ) << "webvtt file contained different" <<
+																			 "number of cues than expected," <<
+																			 "once parsed.";
+  }
+
+  WebVTT::uint cueCount() const
+  {
+    return parser->cueCount();
+  }
+
+  WebVTT::uint errorCount() const
+  {
+    return parser->errorCount();
+  }
+
+  const WebVTT::Cue& getCue( WebVTT::uint index )
+  {
+    try
+    {
+      return parser->getCue( index );
+    }
+    catch(std::exception e)
+    {
+      throw e;
+    }
+  }
+
+  const Error& getError( WebVTT::uint index )
+  {
+    try
+    {
+      return parser->getError( index );
+    }
+    catch( std::exception e )
+    {
+      throw e;
+    }
+  }
+
+private:
+  ItemStorageParser *parser;
+};
+
+#endif

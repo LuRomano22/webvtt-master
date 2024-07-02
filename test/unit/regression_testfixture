@@ -1,0 +1,87 @@
+#ifndef __REGRESSION_TESTFIXTURE__
+#  define __REGRESSION_TESTFIXTURE__
+
+#  include <gtest/gtest.h>
+#  include <webvtt/parser_internal.h>
+#  include <limits.h>
+#  include <fstream>
+#  include <string>
+
+// This is set by CMake to contain the TEST_FILE_DIR value.
+#include "test_config.h"
+
+class RegressionTest : public ::testing::Test
+{
+public:
+  virtual void SetUp()
+  {
+    ASSERT_TRUE( webvtt_create_parser( &read, &error, this, &parser )
+                  == WEBVTT_SUCCESS );
+  }
+
+  virtual void TearDown()
+  {
+    webvtt_delete_parser( parser );
+    parser = 0;
+  }
+
+  static std::string testPath( const std::string &path )
+  {
+    return TEST_FILE_DIR + std::string("/regressions/") + path;
+  }
+
+  bool parse( const std::string &file, int bufferSize = 0x4000 )
+  {
+    if( bufferSize < 0 || bufferSize >= INT_MAX ) {
+      bufferSize = INT_MAX;
+    }
+    std::string testfile = testPath( file );
+    reader.open( testfile.c_str(), std::ios::in | std::ios::binary );
+
+    if( !reader.good() ) {
+      std::cout << "Failed to open file '" << testfile << "'\n";
+      return false;
+    }
+
+    std::vector<char> array( bufferSize );
+    char *buf = &array[0];
+    webvtt_status status;
+    bool eof;
+    do {
+      reader.read( reinterpret_cast<char *>(buf), bufferSize );
+      unsigned int len = (unsigned int)reader.gcount();
+      eof = reader.eof();
+      status = ::webvtt_parse_chunk( parser, buf, len );
+    } while( !WEBVTT_FAILED(status) && !eof );
+    ::webvtt_finish_parsing( parser );
+    return status == WEBVTT_SUCCESS;
+  }
+
+  virtual void readCue( webvtt_cue *cue )
+  {
+    webvtt_release_cue( &cue );
+  }
+
+  virtual int reportError( webvtt_uint line, webvtt_uint col, webvtt_error err )
+  {
+    return 0;
+  }
+
+private:
+  static void WEBVTT_CALLBACK read( void *userdata, webvtt_cue *cue )
+  {
+    reinterpret_cast<RegressionTest*>(userdata)->readCue( cue );
+  }
+
+  static int WEBVTT_CALLBACK error( void *userdata, webvtt_uint line,
+                                    webvtt_uint col, webvtt_error err )
+  {
+    RegressionTest *self = reinterpret_cast<RegressionTest*>(userdata);
+    return self->reportError( line, col, err );
+  }
+  webvtt_parser parser;
+  std::ifstream reader;
+};
+
+#endif
+

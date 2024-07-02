@@ -1,0 +1,142 @@
+//
+// Copyright (c) 2013 Mozilla Foundation and Contributors
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are
+// met:
+//
+//  - Redistributions of source code must retain the above copyright
+// notice, this list of conditions and the following disclaimer.
+//  - Redistributions in binary form must reproduce the above copyright
+// notice, this list of conditions and the following disclaimer in the
+// documentation and/or other materials provided with the distribution.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+// ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+// HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//
+
+#ifndef __WEBVTTXX_NODE__
+# define __WEBVTTXX_NODE__
+
+# include <stdexcept>
+
+# include <webvtt/node.h>
+
+# include "string"
+# include "timestamp"
+
+namespace WebVTT
+{
+
+class Node
+{
+public:
+  enum NodeKind {
+    Class = WEBVTT_CLASS,
+    Italic = WEBVTT_ITALIC,
+    Underline = WEBVTT_UNDERLINE,
+    Bold = WEBVTT_BOLD,
+    Ruby = WEBVTT_RUBY,
+    RubyText = WEBVTT_RUBY_TEXT,
+    Voice = WEBVTT_VOICE,
+    Text = WEBVTT_TEXT,
+    TimeStamp = WEBVTT_TIME_STAMP,
+    Head = WEBVTT_HEAD_NODE,
+    Empty = WEBVTT_EMPTY_NODE,
+    Lang = WEBVTT_LANG
+  };
+
+  Node() { webvtt_init_node( &node ); }
+  Node( const Node &otherNode ) : node( otherNode.node ) {
+    webvtt_ref_node( node );
+  }
+  Node( webvtt_node *pnode )
+  {
+    if( pnode ) {
+      node = pnode;
+      webvtt_ref_node( node );
+    }
+    else {
+      webvtt_init_node( &node );
+    }
+  }
+  ~Node() { webvtt_release_node( &node ); }
+
+  bool isEmpty() const { return kind() == Empty; }
+  NodeKind kind() const { return (NodeKind)node->kind; }
+  int childCount() const { return node->data.internal_data->length; }
+
+  Node operator[]( int index )
+  {
+    if( index < 0 || index >= childCount() ) {
+      throw std::out_of_range( "Node Node::operator[]: "
+        "index out of bounds" );
+    }
+    return Node( node->data.internal_data->children[ index ] );
+  }
+
+  const Node operator[]( int index ) const
+  {
+    if( index < 0 || index >= childCount() ) {
+      throw std::out_of_range( "const Node::operator[] const: "
+        "index out of bounds" );
+    }
+    return Node( node->data.internal_data->children[ index ] );
+  }
+
+  const Timestamp timeStamp() const
+  {
+    if( kind() != TimeStamp ) {
+      return Timestamp();
+    }
+    return Timestamp( node->data.timestamp );
+  }
+
+  const String text() const
+  {
+    if( kind() != Text ) {
+      return String();
+    }
+    return String( &node->data.text );
+  }
+
+  const String annotation() const
+  {
+    if( !node->data.internal_data ) {
+      return String();
+    }
+    return String( &node->data.internal_data->annotation );
+  }
+
+  const String lang() const
+  {
+    if( !node->data.internal_data ) {
+      return String();
+    }
+    return String( &node->data.internal_data->lang );
+  }
+
+  const StringList cssClasses() const
+  {
+    if( !node->data.internal_data->css_classes ) {
+      return StringList();
+    }
+    return StringList( node->data.internal_data->css_classes );
+  }
+private:
+  webvtt_node *node;
+};
+
+}
+
+#endif

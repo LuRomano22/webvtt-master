@@ -1,0 +1,173 @@
+//
+// Copyright (c) 2013 Mozilla Foundation and Contributors
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are
+// met:
+//
+//  - Redistributions of source code must retain the above copyright
+// notice, this list of conditions and the following disclaimer.
+//  - Redistributions in binary form must reproduce the above copyright
+// notice, this list of conditions and the following disclaimer in the
+// documentation and/or other materials provided with the distribution.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+// ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+// HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//
+
+#ifndef __WEBVTTXX_CUE__
+# define __WEBVTTXX_CUE__
+
+# include <webvtt/cue.h>
+# include "base"
+# include "timestamp"
+# include "string"
+# include "node"
+
+namespace WebVTT
+{
+
+class Cue
+{
+private:
+  friend class AbstractParser;
+  friend class CueBuilder;
+  Cue( webvtt_cue *pcue ) {
+    webvtt_ref_cue(pcue);
+    cue = pcue;
+  }
+
+public:
+  Cue( const Cue &other )
+    : cue(other.cue) {
+    webvtt_ref_cue( cue );
+  }
+
+  Cue &operator=( const Cue &other ) {
+    webvtt_ref_cue( other.cue );
+    webvtt_cue *oldcue = 0;
+
+    if( cue ) {
+      oldcue = cue;
+    }
+    cue = other.cue;
+    if( oldcue ) {
+      webvtt_release_cue( &oldcue );
+    }
+
+    return *this;
+  }
+
+  enum Orientation {
+    Horizontal,
+    Vertical
+  };
+
+  enum Direction {
+    Default = WEBVTT_HORIZONTAL,
+    LeftToRight = WEBVTT_VERTICAL_LR,
+    RightToLeft = WEBVTT_VERTICAL_RL
+  };
+
+  enum Align {
+    Start = WEBVTT_ALIGN_START,
+    Middle = WEBVTT_ALIGN_MIDDLE,
+    End = WEBVTT_ALIGN_END,
+    Left = WEBVTT_ALIGN_LEFT,
+    Right = WEBVTT_ALIGN_RIGHT,
+  };
+
+  inline ~Cue() {
+    if( cue ) {
+      webvtt_release_cue(&cue);
+    }
+  }
+
+  inline Timestamp startTime() const {
+    return Timestamp(cue->from);
+  }
+
+  inline Timestamp endTime() const {
+    return Timestamp(cue->until);
+  }
+
+  inline const String id() const {
+    return String(&cue->id);
+  }
+
+  inline String body() const {
+    return String( &cue->body );
+  }
+
+  inline const Node nodeHead() const {
+    return Node( cue->node_head );
+  }
+
+  /**
+   * Cue settings
+   * These helper functions allow applications to query for data about how to
+   * render the cue as a whole
+   */
+  inline bool snapToLines() const { return !!cue->snap_to_lines; }
+
+  inline Orientation orientation() const {
+    const Orientation orientations[] = { Horizontal, Vertical };
+    return orientations[!!cue->settings.vertical];
+  }
+
+  inline Direction direction() const {
+    return (Direction)cue->settings.vertical;
+  }
+  inline float relativeLinePosition() const {
+    return ( 1.f / 100.f ) * static_cast<float>(
+      relativeLinePositionPercentage()
+    );
+  }
+  inline uint relativeLinePositionPercentage() const {
+    return static_cast<uint>( cue->settings.line );
+  }
+  inline int lineNumber() const { return cue->settings.line; }
+  inline float textPosition() const {
+    return ( 1.f / 100.f ) * (float)cue->settings.position;
+  }
+  inline uint textPositionPercentage() const { return cue->settings.position; }
+  inline float size() const {
+    return ( 1.f / 100.f ) * (float)cue->settings.size;
+  }
+  inline uint sizePercentage() const { return cue->settings.size; }
+  inline Align alignment() const { return (Align)(cue->settings.align); }
+
+  inline bool isHorizontal() const { return orientation() == Horizontal; }
+  inline bool isVertical() const { return orientation() == Vertical; }
+  inline bool isVerticalLeftToRight() const {
+    return direction() == LeftToRight;
+  }
+  inline bool isVerticalRightToLeft() const {
+    return direction() == RightToLeft;
+  }
+  inline bool isRelativeLinePosition() const { return !snapToLines(); }
+  inline bool isLinePositionAuto() const {
+    return relativeLinePositionPercentage() == WEBVTT_AUTO;
+  }
+  inline bool isAlignedToStart() const { return alignment() == Start; }
+  inline bool isAlignedToMiddle() const { return alignment() == Middle; }
+  inline bool isAlignedToEnd() const { return alignment() == End; }
+  inline bool isAlignedToLeft() const { return alignment() == Left; }
+  inline bool isAlignedToRight() const { return alignment() == Right; }
+private:
+  webvtt_cue *cue;
+};
+
+}
+
+#endif

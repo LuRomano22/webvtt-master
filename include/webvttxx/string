@@ -1,0 +1,234 @@
+//
+// Copyright (c) 2013 Mozilla Foundation and Contributors
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are
+// met:
+//
+//  - Redistributions of source code must retain the above copyright
+// notice, this list of conditions and the following disclaimer.
+//  - Redistributions in binary form must reproduce the above copyright
+// notice, this list of conditions and the following disclaimer in the
+// documentation and/or other materials provided with the distribution.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+// ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+// HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//
+
+#ifndef __WEBVTTXX_STRING__
+# define __WEBVTTXX_STRING__
+
+# include <webvtt/string.h>
+# include "base"
+
+# define UTF16_LEFT_TO_RIGHT   (0x200E)
+# define UTF16_RIGHT_TO_LEFT   (0x200F)
+# define UTF16_NO_BREAK_SPACE  (0x00A0)
+
+namespace WebVTT
+{
+
+class String
+{
+public:
+  inline String() {
+    webvtt_init_string( &string );
+  }
+
+  inline String( webvtt_string *other ) {
+    webvtt_copy_string( &string, other );
+  }
+
+  inline String( const char *buffer, int len = -1 ) {
+    if( WEBVTT_FAILED( webvtt_create_string_with_text( &string, buffer, len ) ) ) {
+      // TODO: Throw exception on errors.
+    }
+  }
+
+  /**
+   * Copy constructors
+   */
+  inline String( const String &other ) {
+    webvtt_copy_string( &string, &other.string );
+  }
+
+  inline String &operator=( const String &other ) {
+    webvtt_copy_string( &string, &other.string );
+    return *this;
+  }
+
+  inline ~String() {
+    webvtt_release_string( &string );
+  }
+
+  inline void detach() {
+    webvtt_string_detach( &string );
+  }
+
+  inline bool isEmpty() const {
+    return webvtt_string_is_empty( &string ) == 1;
+  }
+
+  uint16 utf16At( int offset, uint16 &highSurrogate ) const {
+    const char *b = utf8();
+    const char *end = b + length();
+    if( webvtt_skip_utf8( &b, end, offset ) ) {
+      return webvtt_utf8_to_utf16( b, end, &highSurrogate );
+    }
+    return 0;
+  }
+
+  uint16 utf16At( int offset ) const {
+    uint16 high;
+    return utf16At( offset, high );
+  }
+
+  uint32 utf32At( int offset ) const {
+    uint16 hi, lo = utf16At( offset, hi );
+    return toUtf32( lo, hi );
+  }
+
+  static bool isSurrogate( uint16 ch ) {
+    return ( ( ch & 0xF800 ) == 0xD800 );
+  }
+
+  static bool requiresSurrogate( uint32 ch ) {
+    return ch >= 0x10000;
+  }
+
+  static bool isSurrogateLead( uint16 ch ) {
+    return ( ch & 0x400 ) == 0;
+  }
+
+  static bool isSurrogateTrail( uint16 ch ) {
+    return ( ch & 0x400 ) != 0;
+  }
+
+  static uint32 toUtf32( uint16 low, uint16 high ) {
+    return (( uint32 )high << 10) + low - 0x35FDC00;
+  }
+
+  static uint32 toUtf32( uint16 ch ) {
+    if( !isSurrogate( ch ) ) {
+      return ( uint32 )ch;
+    }
+    return 0xFFFD;
+  }
+
+  inline const char *utf8() const {
+    return webvtt_string_text(&string);
+  }
+
+  inline uint length() const {
+    return webvtt_string_length(&string);
+  }
+
+  inline uint capacity() const {
+    return webvtt_string_capacity(&string);
+  }
+
+  /* Count of Unicode codepoints in string */
+  inline uint charCount() const {
+    return (uint)webvtt_utf8_chcount( utf8(), utf8() + length() );
+  }
+
+  inline String &append( char ch, webvtt_status &result ) {
+    result = webvtt_string_putc( &string, ch );
+    return *this;
+  }
+
+  inline String &append( char ch ) {
+    webvtt_status ignored;
+    return append( ch, ignored );
+  }
+
+  inline String &append( const char *str, webvtt_status &result ) {
+    result = webvtt_string_append( &string, str, -1 );
+    return *this;
+  }
+
+  inline String &append( const char *str, int len, webvtt_status &result ) {
+    result = webvtt_string_append( &string, str, len );
+    return *this;
+  }
+
+  inline String &append( const char *str, int len = -1 ) {
+    webvtt_status ignored;
+    return append( str, len, ignored );
+  }
+
+  inline String &append( const String &other, webvtt_status &result ) {
+    result = webvtt_string_append( &string, other.utf8(), -1 );
+    return *this;
+  }
+
+  inline String &append( const String &other, int len, webvtt_status &result ) {
+    result = webvtt_string_append( &string, other.utf8(), len );
+    return *this;
+  }
+
+  inline String &append( const String &other, int len = -1 ) {
+    webvtt_status ignored;
+    return append( other, len, ignored );
+  }
+
+private:
+  webvtt_string string;
+};
+
+class StringList
+{
+public:
+
+  inline StringList() : stringList( 0 ) { }
+  inline StringList( webvtt_stringlist *other ) : stringList( other ) {}
+
+  inline String operator[]( uint i ) const
+  {
+    if( stringList && i <= stringList->length ) {
+      return String( &stringList->items[ i ] );
+    }
+    return String();
+  }
+
+  inline String stringAt( uint i ) {
+    return (*this)[ i ];
+  }
+
+  inline uint length() {
+    return stringList ? stringList->length : 0;
+  }
+
+  inline uint alloc() {
+    return stringList ? stringList->alloc : 0;
+  }
+
+  inline bool pop( String &str ) {
+    webvtt_string temp;
+
+    if( !webvtt_stringlist_pop( stringList, &temp ) ) {
+      return false;
+    }
+
+    str = String( &temp );
+    webvtt_release_string( &temp );
+    return true;
+  }
+
+private:
+  webvtt_stringlist *stringList;
+};
+
+}
+
+#endif
